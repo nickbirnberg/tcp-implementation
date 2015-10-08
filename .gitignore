@@ -39,5 +39,5 @@
 
 # MP2-Specific
 /obj
-receiver_main
-sender_main
+reliable_receiver
+reliable_sender
