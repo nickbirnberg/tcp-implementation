@@ -17,6 +17,7 @@
 #include <netdb.h>
 
 #define MAXPAYLOAD 1472 // max number of bytes we can get at once
+#define TIMEOUT 30 // milliseconds to timeout
 
 void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigned long long int bytesToTransfer);
 
@@ -57,7 +58,7 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
     for(p = servinfo; p != NULL; p = p->ai_next) {
         if ((sockfd = socket(p->ai_family, p->ai_socktype,
                 p->ai_protocol)) == -1) {
-            perror("talker: socket");
+            perror("sender: socket");
             continue;
         }
 
@@ -65,22 +66,44 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
     }
 
     if (p == NULL) {
-        fprintf(stderr, "talker: failed to create socket\n");
+        fprintf(stderr, "sender: failed to create socket\n");
         return;
     }
 
-    char message[] = "Hello!";
-
-    if ((numbytes = sendto(sockfd, message, strlen(message), 0,
-             p->ai_addr, p->ai_addrlen)) == -1) {
-        perror("talker: sendto");
-        exit(1);
+    if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1)
+    {
+    	perror("sender: connect");
     }
-
     freeaddrinfo(servinfo);
 
-    printf("talker: sent %d bytes to %s\n", numbytes, hostname);
-    close(sockfd);
+    // create timeout for recv.
+    struct timeval tv;
+	tv.tv_sec = 0;  // 0 seconds
+	tv.tv_usec = TIMEOUT * 1000;  // TIMEOUT milliseconds
 
-    return;
+	setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(struct timeval));
+
+    // loop for initial SYN/ACK 
+    while(1) {
+    	char message[] = "SYN";
+	    if ((numbytes = send(sockfd, message, strlen(message), 0)) == -1) {
+	        perror("sender: sendto");
+	        return;
+	    }
+	    printf("sender: sent %d bytes to %s\n", numbytes, hostname);
+	    printf("sender: waiting for ACK from receiver\n");
+	    int response_len = recv(sockfd, &message, strlen(message), 0);
+	    if (response_len >= 0) {
+		    printf("sender: packet contains \"%s\"\n", message);
+		    break;
+		}
+		else if (response_len == -1) {
+		    perror("sender: receive ACK");
+		}
+		printf("sender: timeout, retrying.\n");
+    }
+
+    // Connection Established on Both Ends, can now use send()/recv() on both ends.
+
+    close(sockfd);
 }

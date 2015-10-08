@@ -17,6 +17,7 @@
 #include <netdb.h>
 
 #define MAXPAYLOAD 1472 // max number of bytes we can get at once
+#define ACKBUFFERSIZE 
 
 
 void reliablyReceive(char* myUDPport, char* destinationFile);
@@ -68,13 +69,13 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
     for(p = servinfo; p != NULL; p = p->ai_next) {
         if ((sockfd = socket(p->ai_family, p->ai_socktype,
                 p->ai_protocol)) == -1) {
-            perror("listener: socket");
+            perror("receiver: socket");
             continue;
         }
 
         if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
             close(sockfd);
-            perror("listener: bind");
+            perror("receiver: bind");
             continue;
         }
 
@@ -82,28 +83,58 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
     }
 
     if (p == NULL) {
-        fprintf(stderr, "listener: failed to bind socket\n");
+        fprintf(stderr, "receiver: failed to bind socket\n");
         return;
     }
 
-    freeaddrinfo(servinfo);
-
-    printf("listener: waiting to recvfrom...\n");
+    printf("receiver: waiting to receive SYN...\n");
 
     addr_len = sizeof their_addr;
     if ((numbytes = recvfrom(sockfd, buf, MAXPAYLOAD-1 , 0,
         (struct sockaddr *)&their_addr, &addr_len)) == -1) {
         perror("recvfrom");
-        exit(1);
+        return;
     }
 
-    printf("listener: got packet from %s\n",
+    printf("receiver: got packet from %s\n",
         inet_ntop(their_addr.ss_family,
             get_in_addr((struct sockaddr *)&their_addr),
             s, sizeof s));
-    printf("listener: packet is %d bytes long\n", numbytes);
+    printf("receiver: packet is %d bytes long\n", numbytes);
     buf[numbytes] = '\0';
-    printf("listener: packet contains \"%s\"\n", buf);
+    printf("receiver: packet contains \"%s\"\n", buf);
+
+    if (connect(sockfd, (struct sockaddr*)&their_addr, addr_len) == -1)
+    {
+    	perror("receiver: connect");
+    }
+
+    freeaddrinfo(servinfo);
+
+    char ack[] = "ACK";
+
+    printf("receiver: sending ACK packet to sender.\n");
+    send(sockfd, ack, strlen(ack), 0);
+
+    uint16_t ack_number = 0;
+    // Make sure the ACK/SIN pockets werent dropped.
+    while (1) {
+    	printf("receiver: waiting for data or another SYN.\n");
+   		int response_len = recv(sockfd, buf, MAXPAYLOAD-1, 0);
+   		if (response_len == 3) {
+   			// There was a pocket drop, receiving SYN again.
+   			printf("receiver: received SYN, sending ACK packet to sender.\n");
+   			send(sockfd, ack, strlen(ack), 0);
+   			continue;
+   		} else if (response_len == -1) {
+   			perror("receiver: recv");
+   			return;
+   		} else {
+    		// Connection Established on Both Ends, can now use send()/recv() on both ends.
+    		// buf now holds the data for the first packet.
+   			break;
+   		}
+    }
 
     close(sockfd);
 }
