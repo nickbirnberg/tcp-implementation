@@ -9,16 +9,16 @@ RECEIVEROBJECTS = obj/receiver_main.o
 
 .PHONY: all clean
 
-all : obj sender_main receiver_main
+all : obj reliable_sender reliable_receiver
 
-sender_main: $(SENDEROBJECTS)
+reliable_sender: $(SENDEROBJECTS)
 	$(CC) $(COMPILERFLAGS) $^ -o $@ $(LINKLIBS)
 
-receiver_main: $(RECEIVEROBJECTS)
+reliable_receiver: $(RECEIVEROBJECTS)
 	$(CC) $(COMPILERFLAGS) $^ -o $@ $(LINKLIBS)
 
 clean :
-	$(RM) -r obj/ sender_main receiver_main output
+	$(RM) -r obj/ reliable_sender reliable_receiver output
 obj/%.o: src/%.c
 	$(CC) $(COMPILERFLAGS) -c -o $@ $<
 obj:
