@@ -17,6 +17,7 @@
 #include <netdb.h>
 
 #define MAXPAYLOAD 1472 // max number of bytes we can get at once
+#define MAXDATA MAXPAYLOAD - 4
 #define TIMEOUT 30 // milliseconds to timeout
 
 void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigned long long int bytesToTransfer);
@@ -104,6 +105,30 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
     }
 
     // Connection Established on Both Ends, can now use send()/recv() on both ends.
+
+    // Packet should contain sequence number as well as data.
+    // Sequence number needs to be transformed from host to network endian
+    uint32_t seq_num = 0;
+    struct Packet
+    {
+    	uint32_t seq_num_to_n;
+    	char data[MAXDATA];
+    } packet;
+
+    // Read file and start sending.
+    FILE *fp = fopen(filename, "r");
+    if (fp == NULL) {
+    	perror("sender: can't open file");
+    }
+    
+	size_t data_len = fread(packet.data, 1, sizeof(packet.data), fp);
+	packet.seq_num_to_n = htonl(seq_num);
+
+	send(sockfd, &packet, data_len + 4, 0);
+
+	fclose(fp);
+
+    printf("Bytes to Transfer: %llu\n", bytesToTransfer);
 
     close(sockfd);
 }

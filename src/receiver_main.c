@@ -17,6 +17,7 @@
 #include <netdb.h>
 
 #define MAXPAYLOAD 1472 // max number of bytes we can get at once
+#define MAXDATA MAXPAYLOAD - 4
 #define ACKBUFFERSIZE 
 
 
@@ -116,11 +117,18 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
     printf("receiver: sending ACK packet to sender.\n");
     send(sockfd, ack, strlen(ack), 0);
 
-    uint16_t ack_number = 0;
+    /* Receive data */
+    struct Packet
+    {
+    	uint32_t seq_num_from_n;
+    	char data[MAXDATA];
+    } packet;
+
+    // uint32_t ack_number = 0;
     // Make sure the ACK/SIN pockets werent dropped.
     while (1) {
     	printf("receiver: waiting for data or another SYN.\n");
-   		int response_len = recv(sockfd, buf, MAXPAYLOAD-1, 0);
+   		int response_len = recv(sockfd, &packet, sizeof(packet), 0);
    		if (response_len == 3) {
    			// There was a pocket drop, receiving SYN again.
    			printf("receiver: received SYN, sending ACK packet to sender.\n");
@@ -130,11 +138,14 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
    			perror("receiver: recv");
    			return;
    		} else {
-    		// Connection Established on Both Ends, can now use send()/recv() on both ends.
-    		// buf now holds the data for the first packet.
+    		printf("receiver: packet contains %u bytes\n", response_len);
+    		printf("receiver: packet's data is %s\n", packet.data);
+    		printf("receiver: the sequence number is %u\n", ntohl(packet.seq_num_from_n));
    			break;
    		}
     }
 
+
+    printf("Destination File: %s\n", destinationFile);
     close(sockfd);
 }
