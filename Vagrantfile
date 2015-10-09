@@ -12,7 +12,7 @@ Vagrant.configure(2) do |config|
   config.vm.define "sender" do |sender|
     sender.vm.network "private_network", ip: "10.66.66.10"
     sender.vm.hostname = "sendervm"
-    sender.vm.provision "shell", inline: <<-SHELL
+    sender.vm.provision "shell", run: "always", inline: <<-SHELL
       sudo tc qdisc del dev eth1 root 2>/dev/null
       sudo tc qdisc add dev eth1 root handle 1:0 netem delay 20ms loss 5%
       sudo tc qdisc add dev eth1 parent 1:1 handle 10: tbf rate 40Mbit burst 10mb latency 1ms
