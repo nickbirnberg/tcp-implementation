@@ -102,8 +102,7 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
         inet_ntop(their_addr.ss_family,
             get_in_addr((struct sockaddr *)&their_addr),
             s, sizeof s));
-    printf("receiver: packet is %d bytes long\n", numbytes);
-    printf("receiver: packet contains %u\n", number_of_packets);
+    printf("receiver: file will come in %u packets\n", number_of_packets);
 
     if (connect(sockfd, (struct sockaddr*)&their_addr, addr_len) == -1)
     {
@@ -142,9 +141,8 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
    			perror("receiver: recv");
    			return;
    		} else {
-    		printf("receiver: packet contains %u bytes\n", response_len);
-    		printf("receiver: packet's data is %s\n", packets[0].data);
-    		printf("receiver: the sequence number is %u\n", ntohl(packets[0].seq_num_from_n));
+    		printf("receiver: received packet %u/%u\n", ntohl(packets[0].seq_num_from_n), 
+    			number_of_packets - 1);
    			break;
    		}
     }
@@ -155,13 +153,17 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
     	perror("receiver: can't create file");
     }
 
-    uint32_t i;
     // write all but the last packet
+    uint32_t i;
     for (i = 0; i < number_of_packets - 1; ++i)
     {
     	fwrite(packets[i].data, 1, sizeof(packets[i].data), fp);
     }
     // write last packet
     fwrite(packets[i].data, 1, last_packet_size - 4, fp);
+    fclose(fp);
+
+    printf("receiver: wrote data contained in packet %u to %s\n", i, destinationFile);
+
     close(sockfd);
 }

@@ -94,14 +94,14 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 	        perror("sender: sendto");
 	        return;
 	    }
-	    printf("sender: sent %d bytes to %s\n", numbytes, hostname);
+	    printf("sender: sent calculated number (%d/4 bytes) to %s\n", numbytes, hostname);
 	    printf("sender: waiting for ACK from receiver\n");
 
 	    char ack_message[4];
 	    int response_len = recv(sockfd, &ack_message, sizeof(ack_message), 0);
 	    if (response_len >= 0) {
 			ack_message[3] = '\0';
-		    printf("sender: packet contains \"%s\"\n", ack_message);
+		    printf("sender: got %s\n", ack_message);
 		    break;
 		}
 		else if (response_len == -1) {
@@ -137,6 +137,7 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 	fclose(fp);
 
 	// Send last packet
+	printf("sender: sending the final packet.\n");
 	send(sockfd, &packets[num_packets - 1], last_packet_size + sizeof(uint32_t), 0);
 
     close(sockfd);
