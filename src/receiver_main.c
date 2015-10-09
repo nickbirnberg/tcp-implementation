@@ -122,13 +122,17 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
     {
     	uint32_t seq_num_from_n;
     	char data[MAXDATA];
-    } packet;
+    } packets[number_of_packets];
 
     // uint32_t ack_number = 0;
     // Make sure the ACK/SIN pockets werent dropped.
+    uint32_t last_packet_size;
     while (1) {
     	printf("receiver: waiting for data or another SYN.\n");
-   		int response_len = recv(sockfd, &packet, sizeof(packet), 0);
+   		uint32_t response_len = recv(sockfd, &packets[0], sizeof(packets[0]), 0);
+   		if (response_len < MAXPAYLOAD) {
+   			last_packet_size = response_len;
+   		}
    		if (response_len == 3) {
    			// There was a pocket drop, receiving SYN again.
    			printf("receiver: received SYN, sending ACK packet to sender.\n");
@@ -139,13 +143,25 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
    			return;
    		} else {
     		printf("receiver: packet contains %u bytes\n", response_len);
-    		printf("receiver: packet's data is %s\n", packet.data);
-    		printf("receiver: the sequence number is %u\n", ntohl(packet.seq_num_from_n));
+    		printf("receiver: packet's data is %s\n", packets[0].data);
+    		printf("receiver: the sequence number is %u\n", ntohl(packets[0].seq_num_from_n));
    			break;
    		}
     }
 
+    // Write packets to file
+    FILE *fp = fopen(destinationFile, "w");
+    if (fp == NULL) {
+    	perror("receiver: can't create file");
+    }
 
-    printf("Destination File: %s\n", destinationFile);
+    uint32_t i;
+    // write all but the last packet
+    for (i = 0; i < number_of_packets - 1; ++i)
+    {
+    	fwrite(packets[i].data, 1, sizeof(packets[i].data), fp);
+    }
+    // write last packet
+    fwrite(packets[i].data, 1, last_packet_size - 4, fp);
     close(sockfd);
 }
