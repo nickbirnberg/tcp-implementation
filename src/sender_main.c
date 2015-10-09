@@ -17,7 +17,7 @@
 #include <netdb.h>
 
 #define MAXPAYLOAD 1472 // max number of bytes we can get at once
-#define MAXDATA MAXPAYLOAD - 4
+#define MAXDATA 1468 // MAXPAYLOAD - 4
 #define TIMEOUT 30 // milliseconds to timeout
 
 void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigned long long int bytesToTransfer);
@@ -81,21 +81,27 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
     struct timeval tv;
 	tv.tv_sec = 0;  // 0 seconds
 	tv.tv_usec = TIMEOUT * 1000;  // TIMEOUT milliseconds
-
 	setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(struct timeval));
+
+	// Calculate number of packets
+	uint32_t num_packets = (bytesToTransfer + MAXDATA - 1) / MAXDATA; //ceiling division
+	printf("sender: calculated number of packets: %u\n", num_packets);
 
     // loop for initial SYN/ACK 
     while(1) {
-    	char message[] = "SYN";
-	    if ((numbytes = send(sockfd, message, strlen(message), 0)) == -1) {
+		uint32_t num_packets_to_n = htonl(num_packets);
+	    if ((numbytes = send(sockfd, &num_packets_to_n, sizeof(num_packets_to_n), 0)) == -1) {
 	        perror("sender: sendto");
 	        return;
 	    }
 	    printf("sender: sent %d bytes to %s\n", numbytes, hostname);
 	    printf("sender: waiting for ACK from receiver\n");
-	    int response_len = recv(sockfd, &message, strlen(message), 0);
+
+	    char ack_message[4];
+	    int response_len = recv(sockfd, &ack_message, sizeof(ack_message), 0);
 	    if (response_len >= 0) {
-		    printf("sender: packet contains \"%s\"\n", message);
+			ack_message[3] = '\0';
+		    printf("sender: packet contains \"%s\"\n", ack_message);
 		    break;
 		}
 		else if (response_len == -1) {
@@ -127,8 +133,6 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 	send(sockfd, &packet, data_len + 4, 0);
 
 	fclose(fp);
-
-    printf("Bytes to Transfer: %llu\n", bytesToTransfer);
 
     close(sockfd);
 }

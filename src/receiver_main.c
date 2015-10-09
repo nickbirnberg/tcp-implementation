@@ -17,7 +17,7 @@
 #include <netdb.h>
 
 #define MAXPAYLOAD 1472 // max number of bytes we can get at once
-#define MAXDATA MAXPAYLOAD - 4
+#define MAXDATA 1468 // MAXPAYLOAD - 4
 #define ACKBUFFERSIZE 
 
 
@@ -52,7 +52,6 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
     int rv;
     int numbytes;
     struct sockaddr_storage their_addr;
-    char buf[MAXPAYLOAD];
     socklen_t addr_len;
     char s[INET6_ADDRSTRLEN];
 
@@ -88,22 +87,23 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
         return;
     }
 
-    printf("receiver: waiting to receive SYN...\n");
+    printf("receiver: waiting to receive number of packets...\n");
+    uint32_t number_of_packets;
 
     addr_len = sizeof their_addr;
-    if ((numbytes = recvfrom(sockfd, buf, MAXPAYLOAD-1 , 0,
+    if ((numbytes = recvfrom(sockfd, &number_of_packets, sizeof(number_of_packets), 0,
         (struct sockaddr *)&their_addr, &addr_len)) == -1) {
         perror("recvfrom");
         return;
     }
+    number_of_packets = ntohl(number_of_packets);
 
     printf("receiver: got packet from %s\n",
         inet_ntop(their_addr.ss_family,
             get_in_addr((struct sockaddr *)&their_addr),
             s, sizeof s));
     printf("receiver: packet is %d bytes long\n", numbytes);
-    buf[numbytes] = '\0';
-    printf("receiver: packet contains \"%s\"\n", buf);
+    printf("receiver: packet contains %u\n", number_of_packets);
 
     if (connect(sockfd, (struct sockaddr*)&their_addr, addr_len) == -1)
     {

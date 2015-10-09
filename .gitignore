@@ -41,3 +41,5 @@
 /obj
 reliable_receiver
 reliable_sender
+sample_in
+sample_out
