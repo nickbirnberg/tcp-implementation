@@ -114,25 +114,30 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 
     // Packet should contain sequence number as well as data.
     // Sequence number needs to be transformed from host to network endian
-    uint32_t seq_num = 0;
     struct Packet
     {
     	uint32_t seq_num_to_n;
     	char data[MAXDATA];
-    } packet;
+    } packets[num_packets];
 
-    // Read file and start sending.
+    // Read file and convert to packets.
     FILE *fp = fopen(filename, "r");
     if (fp == NULL) {
     	perror("sender: can't open file");
     }
     
-	size_t data_len = fread(packet.data, 1, sizeof(packet.data), fp);
-	packet.seq_num_to_n = htonl(seq_num);
-
-	send(sockfd, &packet, data_len + 4, 0);
+	uint32_t i;
+	size_t last_packet_size;
+	for (i = 0; i < num_packets; ++i)
+	{
+		packets[i].seq_num_to_n = htonl(i);
+		last_packet_size = fread(packets[i].data, 1, sizeof(packets[i].data), fp);
+	}
 
 	fclose(fp);
+
+	// Send last packet
+	send(sockfd, &packets[num_packets - 1], last_packet_size + sizeof(uint32_t), 0);
 
     close(sockfd);
 }
