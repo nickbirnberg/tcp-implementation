@@ -121,30 +121,46 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
     {
     	uint32_t seq_num_from_n;
     	char data[MAXDATA];
-    } packets[number_of_packets];
+    } packets[number_of_packets], tmp_packet;
 
-    // uint32_t ack_number = 0;
     // Make sure the ACK/SIN pockets werent dropped.
     uint32_t last_packet_size;
+    ssize_t recv_size;
     while (1) {
     	printf("receiver: waiting for data or another SYN.\n");
-   		uint32_t response_len = recv(sockfd, &packets[0], sizeof(packets[0]), 0);
-   		if (response_len < MAXPAYLOAD) {
-   			last_packet_size = response_len;
-   		}
-   		if (response_len == 3) {
+   		last_packet_size = recv(sockfd, &tmp_packet, sizeof(struct Packet), 0);
+   		if (last_packet_size == 3) {
    			// There was a pocket drop, receiving SYN again.
    			printf("receiver: received SYN, sending ACK packet to sender.\n");
    			send(sockfd, ack, strlen(ack), 0);
    			continue;
-   		} else if (response_len == -1) {
+   		} else if (last_packet_size == -1) {
    			perror("receiver: recv");
    			return;
    		} else {
-    		printf("receiver: received packet %u/%u\n", ntohl(packets[0].seq_num_from_n), 
-    			number_of_packets - 1);
+            uint32_t seq_number = ntohl(tmp_packet.seq_num_from_n);
+            printf("receiver: received packet %u/%u. Sending ACK.\n", seq_number, number_of_packets - 1);
+            packets[seq_number] = tmp_packet;
+            send(sockfd, &tmp_packet.seq_num_from_n, sizeof(uint32_t), 0);
    			break;
    		}
+    }
+
+
+
+    while (1) {
+        recv_size = recv(sockfd, &tmp_packet, sizeof(struct Packet), 0);
+        if (recv_size == 4) {
+            // kill packet received
+            break;
+        }
+        uint32_t seq_number = ntohl(tmp_packet.seq_num_from_n);
+        printf("receiver: received packet %u/%u. Sending ACK.\n", seq_number, number_of_packets - 1);
+        packets[seq_number] = tmp_packet;
+        send(sockfd, &tmp_packet.seq_num_from_n, sizeof(uint32_t), 0);
+        if (seq_number == number_of_packets - 1) {
+            last_packet_size = recv_size;
+        }
     }
 
     // Write packets to file

@@ -126,7 +126,7 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
     	perror("sender: can't open file");
     }
     
-	uint32_t i;
+	uint32_t i, ack_response;
 	size_t last_packet_size;
 	for (i = 0; i < num_packets; ++i)
 	{
@@ -136,9 +136,44 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 
 	fclose(fp);
 
+	// Send packets
+	i = 0;
+	while (i < num_packets - 1)
+	{
+		send(sockfd, &packets[i], sizeof(struct Packet), 0);
+		printf("sender: sent packet %u/%u\n", i, num_packets - 1);
+		recv(sockfd, &ack_response, sizeof(ack_response), 0);
+		ack_response = ntohl(ack_response);
+		if (ack_response == i)
+		{
+			printf("sender: got ack %u/%u\n", ack_response, num_packets - 1);
+			++i;
+		} else {
+			printf("error, got %u\n", ack_response);
+		}
+	}
+
 	// Send last packet
-	printf("sender: sending the final packet.\n");
-	send(sockfd, &packets[num_packets - 1], last_packet_size + sizeof(uint32_t), 0);
+	send(sockfd, &packets[i], last_packet_size + sizeof(uint32_t), 0);
+	printf("sender: sent packet %u/%u\n", i, num_packets - 1);
+	while (i < num_packets)
+	{
+		send(sockfd, &packets[i], last_packet_size + sizeof(uint32_t), 0);
+		printf("sender: sent packet %u/%u\n", i, num_packets - 1);
+		recv(sockfd, &ack_response, sizeof(ack_response), 0);
+		ack_response = ntohl(ack_response);
+		printf("sender: got ack %u/%u\n", ack_response, num_packets - 1);
+		if (ack_response == i)
+		{
+			++i;
+		}
+	}
+
+	// Send kill packets
+	for (i = 0; i < 100; ++i)
+	{
+		send(sockfd, &ack_response, sizeof(uint32_t), 0);
+	}
 
     close(sockfd);
 }
