@@ -20,39 +20,35 @@
 #define MAXDATA 1468 // MAXPAYLOAD - 4
 #define TIMEOUT 30 // milliseconds to timeout
 
-void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigned long long int bytesToTransfer);
+// Connection related variables
+struct addrinfo hints, *servinfo, *p;
+int sockfd;
+int rv;
+int numbytes;
 
-int main(int argc, char** argv)
-{
-	char* udpPort;
-	unsigned long long int numBytes;
-	
-	if(argc != 5)
-	{
-		fprintf(stderr, "usage: %s receiver_hostname receiver_port filename_to_xfer bytes_to_xfer\n\n", argv[0]);
-		exit(1);
-	}
-	udpPort = argv[2];
-	numBytes = atoll(argv[4]);
-	
-	reliablyTransfer(argv[1], udpPort, argv[3], numBytes);
-	return 0;
-} 
+// Congestion Control
+int cwnd = 1, ssthresh;
+uint32_t num_packets;
+int dupACKcount = 0;
 
-void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigned long long int bytesToTransfer)
-{
-	int sockfd;
-    struct addrinfo hints, *servinfo, *p;
-    int rv;
-    int numbytes;
+// Packet struct
+typedef struct packet {
+	uint32_t seq_num;
+	unsigned char data[MAXDATA];
+} packet_t;
 
-    memset(&hints, 0, sizeof hints);
+packet_t* packets;
+
+bool* acked;
+
+int make_connection(char*hostname, char* hostUDPport) {
+	memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_DGRAM;
 
     if ((rv = getaddrinfo(hostname, hostUDPport, &hints, &servinfo)) != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-        return;
+        return -1;
     }
 
     // loop through all the results and make a socket
@@ -68,12 +64,13 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 
     if (p == NULL) {
         fprintf(stderr, "sender: failed to create socket\n");
-        return;
+        return -1;
     }
 
     if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1)
     {
     	perror("sender: connect");
+    	return -1;
     }
     freeaddrinfo(servinfo);
 
@@ -83,11 +80,29 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 	tv.tv_usec = TIMEOUT * 1000;  // TIMEOUT milliseconds
 	setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(struct timeval));
 
-	// Calculate number of packets
-	uint32_t num_packets = (bytesToTransfer + MAXDATA - 1) / MAXDATA; //ceiling division
+	return 0;
+}
+
+void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigned long long int bytesToTransfer)
+{
+    int ssthresh = cwnd;
+
+    // Calculate number of packets
+	num_packets = (bytesToTransfer + MAXDATA - 1) / MAXDATA; //ceiling division
 	printf("sender: calculated number of packets: %u\n", num_packets);
 
-    // loop for initial SYN/ACK 
+    // packets
+    packets = malloc(sizeof(packet_t) * num_packets);
+
+    // acked
+    acked = malloc(sizeof(bool) * num_packets);
+
+    // Establish connection
+    make_connection(hostname, hostUDPport);
+
+    int cwnd_start = 0;
+
+    // main loop
     while(1) {
 		uint32_t num_packets_to_n = htonl(num_packets);
 	    if ((numbytes = send(sockfd, &num_packets_to_n, sizeof(num_packets_to_n), 0)) == -1) {
@@ -112,14 +127,6 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 
     // Connection Established on Both Ends, can now use send()/recv() on both ends.
 
-    // Packet should contain sequence number as well as data.
-    // Sequence number needs to be transformed from host to network endian
-    struct Packet
-    {
-    	uint32_t seq_num_to_n;
-    	char data[MAXDATA];
-    } packets[num_packets];
-
     // Read file and convert to packets.
     FILE *fp = fopen(filename, "r");
     if (fp == NULL) {
@@ -142,3 +149,20 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 
     close(sockfd);
 }
+
+int main(int argc, char** argv)
+{
+	char* udpPort;
+	unsigned long long int numBytes;
+	
+	if(argc != 5)
+	{
+		fprintf(stderr, "usage: %s receiver_hostname receiver_port filename_to_xfer bytes_to_xfer\n\n", argv[0]);
+		exit(1);
+	}
+	udpPort = argv[2];
+	numBytes = atoll(argv[4]);
+	
+	reliablyTransfer(argv[1], udpPort, argv[3], numBytes);
+	return 0;
+} 
