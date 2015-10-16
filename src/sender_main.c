@@ -21,6 +21,12 @@
 #define MAXDATA 1468 // MAXPAYLOAD - 4
 #define TIMEOUT 30 // milliseconds to timeout
 
+#ifdef DEBUG
+# define DEBUG_PRINT(x) printf x
+#else
+# define DEBUG_PRINT(x) do {} while (0)
+#endif
+
 typedef enum { false, true } bool;
 
 void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigned long long int bytesToTransfer);
@@ -88,7 +94,7 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 
 	// Calculate number of packets
 	uint32_t num_packets = (bytesToTransfer + MAXDATA - 1) / MAXDATA; //ceiling division
-	printf("sender: calculated number of packets: %u\n", num_packets);
+	DEBUG_PRINT(("sender: calculated number of packets: %u\n", num_packets));
 
     // loop for initial SYN/ACK 
     while(1) {
@@ -97,20 +103,20 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 	        perror("sender: sendto");
 	        return;
 	    }
-	    printf("sender: sent calculated number (%d/4 bytes) to %s\n", numbytes, hostname);
-	    printf("sender: waiting for ACK from receiver\n");
+	    DEBUG_PRINT(("sender: sent calculated number (%d/4 bytes) to %s\n", numbytes, hostname));
+	    DEBUG_PRINT(("sender: waiting for ACK from receiver\n"));
 
 	    char ack_message[4];
 	    int response_len = recv(sockfd, &ack_message, sizeof(ack_message), 0);
 	    if (response_len >= 0) {
 			ack_message[3] = '\0';
-		    printf("sender: got %s\n", ack_message);
+		    DEBUG_PRINT(("sender: got %s\n", ack_message));
 		    break;
 		}
 		else if (response_len == -1) {
 		    perror("sender: receive ACK");
 		}
-		printf("sender: timeout, retrying.\n");
+		DEBUG_PRINT(("sender: timeout, retrying.\n"));
     }
 
     // Connection Established on Both Ends, can now use send()/recv() on both ends.
@@ -139,34 +145,13 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 
 	fclose(fp);
 
-
-	// // window = 1
-	// // 
-	// struct Packet_Info {
-	// 	time_t time_sent;
-	// 	bool received;
-	// } packet_info[num_packets];
- 	//    memset(&packet_info, 0, sizeof(Packet_Info) * num_packets);
-
-	// whi
-	// send base
-	// record time sent
-	// send packets until base + window_size
-	// recv ack
-	// window_size++
-	// base = ack + 1
-	// if timeout
-	// 		next_seq = base;
-	//		window_size = 1;
-	//
-
 	uint32_t base = 0;
 	uint32_t window_size = 5;
 	uint32_t next_seq = 0;
 	while (num_packets != 1) {
 		while (next_seq < base + window_size && next_seq < num_packets - 1) {
 			send(sockfd, &packets[next_seq], sizeof(struct Packet), 0);
-			printf("sender: sent packet %u/%u\n", next_seq, num_packets - 1);
+			DEBUG_PRINT(("sender: sent packet %u/%u\n", next_seq, num_packets - 1));
 			++next_seq;
 		}
 		ssize_t recv_length = recv(sockfd, &ack_response, sizeof(ack_response), 0);
@@ -176,7 +161,7 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 			continue;
 		}
 		ack_response = ntohl(ack_response);
-		printf("sender: got ack %u/%u\n", ack_response, num_packets - 1);
+		DEBUG_PRINT(("sender: got ack %u/%u\n", ack_response, num_packets - 1));
 		// Break out of loop when you got last second to last ack.
 		if (ack_response == num_packets - 2) {
 			break;
@@ -188,14 +173,14 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 	// Send last packet
 	i = num_packets - 1;
 	send(sockfd, &packets[i], last_packet_size + sizeof(uint32_t), 0);
-	printf("sender: sent packet %u/%u\n", i, num_packets - 1);
+	DEBUG_PRINT(("sender: sent packet %u/%u\n", i, num_packets - 1));
 	while (i < num_packets)
 	{
 		send(sockfd, &packets[i], last_packet_size + sizeof(uint32_t), 0);
-		printf("sender: sent packet %u/%u\n", i, num_packets - 1);
+		DEBUG_PRINT(("sender: sent packet %u/%u\n", i, num_packets - 1));
 		recv(sockfd, &ack_response, sizeof(ack_response), 0);
 		ack_response = ntohl(ack_response);
-		printf("sender: got ack %u/%u\n", ack_response, num_packets - 1);
+		DEBUG_PRINT(("sender: got ack %u/%u\n", ack_response, num_packets - 1));
 		if (ack_response == i)
 		{
 			++i;

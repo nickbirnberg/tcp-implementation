@@ -18,7 +18,12 @@
 
 #define MAXPAYLOAD 1472 // max number of bytes we can get at once
 #define MAXDATA 1468 // MAXPAYLOAD - 4
-#define ACKBUFFERSIZE 
+
+#ifdef DEBUG
+# define DEBUG_PRINT(x) printf x
+#else
+# define DEBUG_PRINT(x) do {} while (0)
+#endif
 
 
 void reliablyReceive(char* myUDPport, char* destinationFile);
@@ -87,7 +92,7 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
         return;
     }
 
-    printf("receiver: waiting to receive number of packets...\n");
+    DEBUG_PRINT(("receiver: waiting to receive number of packets...\n"));
     uint32_t number_of_packets;
 
     addr_len = sizeof their_addr;
@@ -98,11 +103,11 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
     }
     number_of_packets = ntohl(number_of_packets);
 
-    printf("receiver: got packet from %s\n",
+    DEBUG_PRINT(("receiver: got packet from %s\n",
         inet_ntop(their_addr.ss_family,
             get_in_addr((struct sockaddr *)&their_addr),
-            s, sizeof s));
-    printf("receiver: file will come in %u packets\n", number_of_packets);
+            s, sizeof s)));
+    DEBUG_PRINT(("receiver: file will come in %u packets\n", number_of_packets));
 
     if (connect(sockfd, (struct sockaddr*)&their_addr, addr_len) == -1)
     {
@@ -113,7 +118,7 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
 
     char ack[] = "ACK";
 
-    printf("receiver: sending ACK packet to sender.\n");
+    DEBUG_PRINT(("receiver: sending ACK packet to sender.\n"));
     send(sockfd, ack, strlen(ack), 0);
 
     /* Receive data */
@@ -130,11 +135,11 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
     // TODO: first packet drop
 
     while (1) {
-        printf("receiver: waiting for data or another SYN.\n");
+        DEBUG_PRINT(("receiver: waiting for data or another SYN.\n"));
         last_packet_size = recv(sockfd, &tmp_packet, sizeof(struct Packet), 0);
         if (last_packet_size == 3) {
             // There was a pocket drop, receiving SYN again.
-            printf("receiver: received SYN, sending ACK packet to sender.\n");
+            DEBUG_PRINT(("receiver: received SYN, sending ACK packet to sender.\n"));
             send(sockfd, ack, strlen(ack), 0);
             continue;
         } else if (last_packet_size == -1) {
@@ -142,8 +147,8 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
             return;
         } else {
             uint32_t seq_number = ntohl(tmp_packet.seq_num_from_n);
-            printf("receiver: received packet %u/%u. Sending ACK %u.\n", seq_number, number_of_packets - 1, 
-                cumulative_recv);
+            DEBUG_PRINT(("receiver: received packet %u/%u. Sending ACK %u.\n", seq_number, number_of_packets - 1, 
+                cumulative_recv));
             packets[seq_number] = tmp_packet;
             uint32_t cumul_to_n = htonl(cumulative_recv);
             send(sockfd, &cumul_to_n, sizeof(uint32_t), 0);
@@ -162,8 +167,8 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
         {
             ++cumulative_recv;
         }
-        printf("receiver: received packet %u/%u. Sending ACK %u.\n", seq_number, number_of_packets - 1, 
-            cumulative_recv);
+        DEBUG_PRINT(("receiver: received packet %u/%u. Sending ACK %u.\n", seq_number, number_of_packets - 1, 
+            cumulative_recv));
         packets[seq_number] = tmp_packet;
         uint32_t cumul_to_n = htonl(cumulative_recv);
         send(sockfd, &cumul_to_n, sizeof(uint32_t), 0);
@@ -188,7 +193,7 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
     fwrite(packets[i].data, 1, last_packet_size - 4, fp);
     fclose(fp);
 
-    printf("receiver: wrote data contained in packet %u to %s\n", i, destinationFile);
+    DEBUG_PRINT(("receiver: wrote data contained in packet %u to %s\n", i, destinationFile));
 
     close(sockfd);
 }
