@@ -161,9 +161,9 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 	//
 
 	uint32_t base = 0;
-	uint32_t window_size = 50;
+	uint32_t window_size = 5;
 	uint32_t next_seq = 0;
-	while (1) {
+	while (num_packets != 1) {
 		while (next_seq < base + window_size && next_seq < num_packets - 1) {
 			send(sockfd, &packets[next_seq], sizeof(struct Packet), 0);
 			printf("sender: sent packet %u/%u\n", next_seq, num_packets - 1);
