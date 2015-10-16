@@ -15,10 +15,13 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <time.h>
 
 #define MAXPAYLOAD 1472 // max number of bytes we can get at once
 #define MAXDATA 1468 // MAXPAYLOAD - 4
 #define TIMEOUT 30 // milliseconds to timeout
+
+typedef enum { false, true } bool;
 
 void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigned long long int bytesToTransfer);
 
@@ -136,24 +139,54 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 
 	fclose(fp);
 
-	// Send packets
-	i = 0;
-	while (i < num_packets - 1)
-	{
-		send(sockfd, &packets[i], sizeof(struct Packet), 0);
-		printf("sender: sent packet %u/%u\n", i, num_packets - 1);
-		recv(sockfd, &ack_response, sizeof(ack_response), 0);
-		ack_response = ntohl(ack_response);
-		if (ack_response == i)
-		{
-			printf("sender: got ack %u/%u\n", ack_response, num_packets - 1);
-			++i;
-		} else {
-			printf("error, got %u\n", ack_response);
+
+	// // window = 1
+	// // 
+	// struct Packet_Info {
+	// 	time_t time_sent;
+	// 	bool received;
+	// } packet_info[num_packets];
+ 	//    memset(&packet_info, 0, sizeof(Packet_Info) * num_packets);
+
+	// whi
+	// send base
+	// record time sent
+	// send packets until base + window_size
+	// recv ack
+	// window_size++
+	// base = ack + 1
+	// if timeout
+	// 		next_seq = base;
+	//		window_size = 1;
+	//
+
+	uint32_t base = 0;
+	uint32_t window_size = 50;
+	uint32_t next_seq = 0;
+	while (1) {
+		while (next_seq < base + window_size && next_seq < num_packets - 1) {
+			send(sockfd, &packets[next_seq], sizeof(struct Packet), 0);
+			printf("sender: sent packet %u/%u\n", next_seq, num_packets - 1);
+			++next_seq;
 		}
+		ssize_t recv_length = recv(sockfd, &ack_response, sizeof(ack_response), 0);
+		if (recv_length < 0) {
+			next_seq = base;
+			// window_size = 1;
+			continue;
+		}
+		ack_response = ntohl(ack_response);
+		printf("sender: got ack %u/%u\n", ack_response, num_packets - 1);
+		// Break out of loop when you got last second to last ack.
+		if (ack_response == num_packets - 2) {
+			break;
+		}
+		base = ack_response + 1;
+		// window_size++;
 	}
 
 	// Send last packet
+	i = num_packets - 1;
 	send(sockfd, &packets[i], last_packet_size + sizeof(uint32_t), 0);
 	printf("sender: sent packet %u/%u\n", i, num_packets - 1);
 	while (i < num_packets)

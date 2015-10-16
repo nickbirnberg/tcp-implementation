@@ -126,27 +126,30 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
     // Make sure the ACK/SIN pockets werent dropped.
     uint32_t last_packet_size;
     ssize_t recv_size;
+    uint32_t cumulative_recv = 0;
+    // TODO: first packet drop
+
     while (1) {
-    	printf("receiver: waiting for data or another SYN.\n");
-   		last_packet_size = recv(sockfd, &tmp_packet, sizeof(struct Packet), 0);
-   		if (last_packet_size == 3) {
-   			// There was a pocket drop, receiving SYN again.
-   			printf("receiver: received SYN, sending ACK packet to sender.\n");
-   			send(sockfd, ack, strlen(ack), 0);
-   			continue;
-   		} else if (last_packet_size == -1) {
-   			perror("receiver: recv");
-   			return;
-   		} else {
+        printf("receiver: waiting for data or another SYN.\n");
+        last_packet_size = recv(sockfd, &tmp_packet, sizeof(struct Packet), 0);
+        if (last_packet_size == 3) {
+            // There was a pocket drop, receiving SYN again.
+            printf("receiver: received SYN, sending ACK packet to sender.\n");
+            send(sockfd, ack, strlen(ack), 0);
+            continue;
+        } else if (last_packet_size == -1) {
+            perror("receiver: recv");
+            return;
+        } else {
             uint32_t seq_number = ntohl(tmp_packet.seq_num_from_n);
-            printf("receiver: received packet %u/%u. Sending ACK.\n", seq_number, number_of_packets - 1);
+            printf("receiver: received packet %u/%u. Sending ACK %u.\n", seq_number, number_of_packets - 1, 
+                cumulative_recv);
             packets[seq_number] = tmp_packet;
-            send(sockfd, &tmp_packet.seq_num_from_n, sizeof(uint32_t), 0);
-   			break;
-   		}
+            uint32_t cumul_to_n = htonl(cumulative_recv);
+            send(sockfd, &cumul_to_n, sizeof(uint32_t), 0);
+            break;
+        }
     }
-
-
 
     while (1) {
         recv_size = recv(sockfd, &tmp_packet, sizeof(struct Packet), 0);
@@ -155,9 +158,15 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
             break;
         }
         uint32_t seq_number = ntohl(tmp_packet.seq_num_from_n);
-        printf("receiver: received packet %u/%u. Sending ACK.\n", seq_number, number_of_packets - 1);
+        if (seq_number == cumulative_recv + 1)
+        {
+            ++cumulative_recv;
+        }
+        printf("receiver: received packet %u/%u. Sending ACK %u.\n", seq_number, number_of_packets - 1, 
+            cumulative_recv);
         packets[seq_number] = tmp_packet;
-        send(sockfd, &tmp_packet.seq_num_from_n, sizeof(uint32_t), 0);
+        uint32_t cumul_to_n = htonl(cumulative_recv);
+        send(sockfd, &cumul_to_n, sizeof(uint32_t), 0);
         if (seq_number == number_of_packets - 1) {
             last_packet_size = recv_size;
         }
