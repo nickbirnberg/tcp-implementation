@@ -20,6 +20,8 @@
 #define MAXPAYLOAD 1472 // max number of bytes we can get at once
 #define MAXDATA 1468 // MAXPAYLOAD - 4
 #define TIMEOUT 30 // milliseconds to timeout
+#define CWND_START 1
+#define SSTHRESH_START 12 // an arbitrarily high value
 
 typedef enum { false, true } bool;
 
@@ -161,10 +163,13 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 	//
 
 	uint32_t base = 0;
-	uint32_t window_size = 5;
 	uint32_t next_seq = 0;
+
+	int cwnd = CWND_START;
+	int ssthresh = SSTHRESH_START;
+
 	while (num_packets != 1) {
-		while (next_seq < base + window_size && next_seq < num_packets - 1) {
+		while (next_seq < base + cwnd && next_seq < num_packets - 1) {
 			send(sockfd, &packets[next_seq], sizeof(struct Packet), 0);
 			printf("sender: sent packet %u/%u\n", next_seq, num_packets - 1);
 			++next_seq;
@@ -172,7 +177,8 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 		ssize_t recv_length = recv(sockfd, &ack_response, sizeof(ack_response), 0);
 		if (recv_length < 0) {
 			next_seq = base;
-			// window_size = 1;
+			ssthresh = cwnd >> 1;
+			cwnd = 1;
 			continue;
 		}
 		ack_response = ntohl(ack_response);
@@ -182,7 +188,12 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 			break;
 		}
 		base = ack_response + 1;
-		// window_size++;
+		// In exponential slow start, increment window size for each ack received
+		if (cwnd < ssthresh)
+			cwnd += 1;
+		// if we're past the threshold, linearly increase it
+		else
+			cwnd += ((ssthresh*ssthresh)/cwnd);
 	}
 
 	// Send last packet
