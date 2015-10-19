@@ -16,6 +16,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <time.h>
+#include <sys/stat.h>
 
 #define MAXPAYLOAD 1472 // max number of bytes we can get at once
 #define MAXDATA 1468 // MAXPAYLOAD - 4
@@ -94,6 +95,15 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 	tv.tv_usec = TIMEOUT * 1000;  // TIMEOUT milliseconds
 	setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(struct timeval));
 
+	// Get file size
+    struct stat st;
+    stat(filename, &st);
+
+    // Either send the requsted number of bytes, or the entire file
+    if (st.st_size < bytesToTransfer) {
+		bytesToTransfer = st.st_size;
+    }
+
 	// Calculate number of packets
 	uint32_t num_packets = (bytesToTransfer + MAXDATA - 1) / MAXDATA; //ceiling division
 	DEBUG_PRINT(("sender: calculated number of packets: %u\n", num_packets));
@@ -139,10 +149,17 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
     
 	uint32_t i, ack_response;
 	size_t last_packet_size;
+
 	for (i = 0; i < num_packets; ++i)
 	{
 		packets[i].seq_num_to_n = htonl(i);
-		last_packet_size = fread(packets[i].data, 1, sizeof(packets[i].data), fp);
+		if (bytesToTransfer < MAXDATA) {
+			last_packet_size = fread(packets[i].data, 1, bytesToTransfer, fp);
+		} else {
+			last_packet_size = fread(packets[i].data, 1, MAXDATA, fp);
+			bytesToTransfer -= MAXDATA;
+		}
+		
 	}
 
 	fclose(fp);
