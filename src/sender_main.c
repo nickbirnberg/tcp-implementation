@@ -165,12 +165,12 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 	fclose(fp);
 
 	uint32_t base = 0;
-	uint32_t window_size = 5;
+	uint32_t window_size = 6;
 	uint32_t next_seq = 0;
 	while (num_packets != 1) {
 		while (next_seq < base + window_size && next_seq < num_packets - 1) {
-			send(sockfd, &packets[next_seq], sizeof(struct Packet), 0);
-			DEBUG_PRINT(("sender: sent packet %u/%u\n", next_seq, num_packets - 1));
+			ssize_t sent_size = send(sockfd, &packets[next_seq], sizeof(struct Packet), 0);
+			DEBUG_PRINT(("sender: sent packet %u/%u of size %zd\n", next_seq, num_packets - 1, sent_size));
 			++next_seq;
 		}
 		ssize_t recv_length = recv(sockfd, &ack_response, sizeof(ack_response), 0);
@@ -189,14 +189,15 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 		// window_size++;
 	}
 
-	// Send last packet
+	// // Send last packet
 	i = num_packets - 1;
-	send(sockfd, &packets[i], last_packet_size + sizeof(uint32_t), 0);
-	DEBUG_PRINT(("sender: sent packet %u/%u\n", i, num_packets - 1));
+	ssize_t sent_size = send(sockfd, &packets[i], last_packet_size + sizeof(uint32_t), 0);
+	DEBUG_PRINT(("sender: sent packet %u/%u of size %zd\n", i, num_packets - 1, sent_size));
+
 	while (i < num_packets)
 	{
-		send(sockfd, &packets[i], last_packet_size + sizeof(uint32_t), 0);
-		DEBUG_PRINT(("sender: sent packet %u/%u\n", i, num_packets - 1));
+		ssize_t sent_size = send(sockfd, &packets[i], last_packet_size + sizeof(uint32_t), 0);
+		DEBUG_PRINT(("sender: sent packet %u/%u of size %zd\n", i, num_packets - 1, sent_size));
 		recv(sockfd, &ack_response, sizeof(ack_response), 0);
 		ack_response = ntohl(ack_response);
 		DEBUG_PRINT(("sender: got ack %u/%u\n", ack_response, num_packets - 1));
@@ -204,12 +205,6 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 		{
 			++i;
 		}
-	}
-
-	// Send kill packets
-	for (i = 0; i < 100; ++i)
-	{
-		send(sockfd, &ack_response, sizeof(uint32_t), 0);
 	}
 
     close(sockfd);

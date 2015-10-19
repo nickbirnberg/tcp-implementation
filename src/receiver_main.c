@@ -15,9 +15,12 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <time.h>
+#include <netdb.h>
 
 #define MAXPAYLOAD 1472 // max number of bytes we can get at once
 #define MAXDATA 1468 // MAXPAYLOAD - 4
+#define TIMEOUT 200
 
 #define DEBUG
 
@@ -136,10 +139,23 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
     uint32_t cumulative_recv = 0;
     // TODO: first packet drop
 
+    // Write packets to file
+    FILE *fp = fopen(destinationFile, "w");
+    if (fp == NULL) {
+        perror("receiver: can't create file");
+    }
+
+    // create timeout for recv.
+    struct timeval tv;
+    tv.tv_sec = 0;  // 0 seconds
+    tv.tv_usec = TIMEOUT * 1000;  // TIMEOUT milliseconds
+    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(struct timeval));
+
+
     while (1) {
         DEBUG_PRINT(("receiver: waiting for data or another SYN.\n"));
         last_packet_size = recv(sockfd, &tmp_packet, sizeof(struct Packet), 0);
-        if (last_packet_size == 3) {
+        if (last_packet_size == 4) {
             // There was a pocket drop, receiving SYN again.
             DEBUG_PRINT(("receiver: received SYN, sending ACK packet to sender.\n"));
             send(sockfd, ack, strlen(ack), 0);
@@ -149,8 +165,14 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
             return;
         } else {
             uint32_t seq_number = ntohl(tmp_packet.seq_num_from_n);
+            if (seq_number != 0)
+            {
+                continue;
+            }
             DEBUG_PRINT(("receiver: received packet %u/%u. Sending ACK %u.\n", seq_number, number_of_packets - 1, 
                 cumulative_recv));
+            // Write first packet to file.
+            fwrite(tmp_packet.data, 1, last_packet_size - 4, fp);
             packets[seq_number] = tmp_packet;
             uint32_t cumul_to_n = htonl(cumulative_recv);
             send(sockfd, &cumul_to_n, sizeof(uint32_t), 0);
@@ -160,13 +182,17 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
 
     while (1) {
         recv_size = recv(sockfd, &tmp_packet, sizeof(struct Packet), 0);
-        if (recv_size == 4) {
-            // kill packet received
+        if (recv_size < 0) {
             break;
         }
         uint32_t seq_number = ntohl(tmp_packet.seq_num_from_n);
         if (seq_number == cumulative_recv + 1)
         {
+            // Write all cumulatively received packets except for last one.
+            if (seq_number != number_of_packets - 1)
+            {
+                fwrite(tmp_packet.data, 1, MAXDATA, fp);
+            }
             ++cumulative_recv;
         }
         DEBUG_PRINT(("receiver: received packet %u/%u. Sending ACK %u.\n", seq_number, number_of_packets - 1, 
@@ -179,23 +205,14 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
         }
     }
 
-    // Write packets to file
-    FILE *fp = fopen(destinationFile, "w");
-    if (fp == NULL) {
-    	perror("receiver: can't create file");
-    }
-
-    // write all but the last packet
-    uint32_t i;
-    for (i = 0; i < number_of_packets - 1; ++i)
-    {
-    	fwrite(packets[i].data, 1, sizeof(packets[i].data), fp);
-    }
     // write last packet
-    fwrite(packets[i].data, 1, last_packet_size - 4, fp);
+    if (number_of_packets != 1)
+    {
+        fwrite(packets[number_of_packets - 1].data, 1, last_packet_size - 4, fp);
+    }
     fclose(fp);
 
-    DEBUG_PRINT(("receiver: wrote data contained in packet %u to %s\n", i, destinationFile));
+    DEBUG_PRINT(("receiver: wrote data contained in packet %u to %s\n", number_of_packets - 1, destinationFile));
 
     close(sockfd);
 }
