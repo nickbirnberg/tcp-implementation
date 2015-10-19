@@ -176,7 +176,6 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 
 	uint32_t base = 0;
 	uint32_t next_seq = 0;
-	int window_size = CWND_START;
 
 	int cwnd = CWND_START;
 	int ssthresh = SSTHRESH_START;
@@ -204,11 +203,13 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 		}
 		base = ack_response + 1;
 		// In exponential slow start, increment window size for each ack received
-		if (cwnd < ssthresh)
-			cwnd += 1;
+		if ((cwnd*2) > ssthresh)
+			cwnd = ssthresh;
+		else if (cwnd < ssthresh)
+			cwnd *= 2;
 		// if we're past the threshold, linearly increase it
-		else
-			cwnd += 1/cwnd;
+		else if (cwnd >= ssthresh)
+			cwnd += 1;
 	}
 
 	// Send last packet
