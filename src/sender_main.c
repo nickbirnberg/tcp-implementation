@@ -16,12 +16,13 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <time.h>
+#include <sys/stat.h>
 
 #define MAXPAYLOAD 1472 // max number of bytes we can get at once
 #define MAXDATA 1468 // MAXPAYLOAD - 4
 #define TIMEOUT 30 // milliseconds to timeout
 #define CWND_START 1
-#define SSTHRESH_START 12 // an arbitrarily high value
+#define SSTHRESH_START 50 // an arbitrarily high value
 
 typedef enum { false, true } bool;
 
@@ -88,6 +89,15 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 	tv.tv_usec = TIMEOUT * 1000;  // TIMEOUT milliseconds
 	setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(struct timeval));
 
+	// Get file size
+    struct stat st;
+    stat(filename, &st);
+
+    // Either send the requsted number of bytes, or the entire file
+    if (st.st_size < bytesToTransfer) {
+    	bytesToTransfer = st.st_size;
+    }
+
 	// Calculate number of packets
 	uint32_t num_packets = (bytesToTransfer + MAXDATA - 1) / MAXDATA; //ceiling division
 	printf("sender: calculated number of packets: %u\n", num_packets);
@@ -139,6 +149,8 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 		last_packet_size = fread(packets[i].data, 1, sizeof(packets[i].data), fp);
 	}
 
+	// TODO: only read in the number of bytes as limited by numberOfBytes
+
 	fclose(fp);
 
 
@@ -164,25 +176,28 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 
 	uint32_t base = 0;
 	uint32_t next_seq = 0;
+	int window_size = CWND_START;
 
 	int cwnd = CWND_START;
 	int ssthresh = SSTHRESH_START;
 
 	while (num_packets != 1) {
+		printf("New cwnd: %d \n", cwnd);
 		while (next_seq < base + cwnd && next_seq < num_packets - 1) {
 			send(sockfd, &packets[next_seq], sizeof(struct Packet), 0);
-			printf("sender: sent packet %u/%u\n", next_seq, num_packets - 1);
+			// printf("sender: sent packet %u/%u\n", next_seq, num_packets - 1);
 			++next_seq;
 		}
 		ssize_t recv_length = recv(sockfd, &ack_response, sizeof(ack_response), 0);
-		if (recv_length < 0) {
+		if (recv_length < -1) {
+			printf("packet dropped\n");
 			next_seq = base;
 			ssthresh = cwnd >> 1;
 			cwnd = 1;
 			continue;
 		}
 		ack_response = ntohl(ack_response);
-		printf("sender: got ack %u/%u\n", ack_response, num_packets - 1);
+		// printf("sender: got ack %u/%u\n", ack_response, num_packets - 1);
 		// Break out of loop when you got last second to last ack.
 		if (ack_response == num_packets - 2) {
 			break;
@@ -193,7 +208,7 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 			cwnd += 1;
 		// if we're past the threshold, linearly increase it
 		else
-			cwnd += ((ssthresh*ssthresh)/cwnd);
+			cwnd += 1/cwnd;
 	}
 
 	// Send last packet

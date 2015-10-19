@@ -162,8 +162,8 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
         {
             ++cumulative_recv;
         }
-        printf("receiver: received packet %u/%u. Sending ACK %u.\n", seq_number, number_of_packets - 1, 
-            cumulative_recv);
+        // printf("receiver: received packet %u/%u. Sending ACK %u.\n", seq_number, number_of_packets - 1, 
+            //cumulative_recv);
         packets[seq_number] = tmp_packet;
         uint32_t cumul_to_n = htonl(cumulative_recv);
         send(sockfd, &cumul_to_n, sizeof(uint32_t), 0);
@@ -182,7 +182,7 @@ void reliablyReceive(char* myUDPport, char* destinationFile)
     uint32_t i;
     for (i = 0; i < number_of_packets - 1; ++i)
     {
-    	fwrite(packets[i].data, 1, sizeof(packets[i].data), fp);
+    	fwrite(packets[i].data, 1, MAXDATA, fp);
     }
     // write last packet
     fwrite(packets[i].data, 1, last_packet_size - 4, fp);
