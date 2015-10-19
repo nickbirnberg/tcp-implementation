@@ -19,6 +19,8 @@
 #define MAXPAYLOAD 1472 // max number of bytes we can get at once
 #define MAXDATA 1468 // MAXPAYLOAD - 4
 
+#define DEBUG
+
 #ifdef DEBUG
 # define DEBUG_PRINT(x) printf x
 #else

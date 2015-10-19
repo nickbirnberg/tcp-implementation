@@ -21,6 +21,8 @@
 #define MAXDATA 1468 // MAXPAYLOAD - 4
 #define TIMEOUT 30 // milliseconds to timeout
 
+#define DEBUG
+
 #ifdef DEBUG
 # define DEBUG_PRINT(x) printf x
 #else
