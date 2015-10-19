@@ -165,18 +165,21 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 	fclose(fp);
 
 	uint32_t base = 0;
-	uint32_t window_size = 6;
+	uint32_t window_size = 5;
+	uint32_t window_frac = 0;
+	uint32_t threshold = 50;
 	uint32_t next_seq = 0;
 	while (num_packets != 1) {
 		while (next_seq < base + window_size && next_seq < num_packets - 1) {
-			ssize_t sent_size = send(sockfd, &packets[next_seq], sizeof(struct Packet), 0);
-			DEBUG_PRINT(("sender: sent packet %u/%u of size %zd\n", next_seq, num_packets - 1, sent_size));
+			send(sockfd, &packets[next_seq], sizeof(struct Packet), 0);
+			DEBUG_PRINT(("sender: sent packet %u/%u with window %u\n", next_seq, num_packets - 1, window_size));
 			++next_seq;
 		}
 		ssize_t recv_length = recv(sockfd, &ack_response, sizeof(ack_response), 0);
 		if (recv_length < 0) {
 			next_seq = base;
-			// window_size = 1;
+			threshold = window_size / 2;
+			window_size = 1;
 			continue;
 		}
 		ack_response = ntohl(ack_response);
@@ -185,8 +188,23 @@ void reliablyTransfer(char* hostname, char* hostUDPport, char* filename, unsigne
 		if (ack_response == num_packets - 2) {
 			break;
 		}
+		if (window_size > threshold)
+		{
+			window_frac++;
+			if (window_frac % window_size == 0)
+			{
+				window_size++;
+				window_frac = 0;
+				threshold = window_size;
+			}
+		} else {
+			window_size++;
+		}
+		if (ack_response < base)
+		{
+			window_size = 5;
+		}
 		base = ack_response + 1;
-		// window_size++;
 	}
 
 	// // Send last packet
